@@ -15,8 +15,6 @@ class Client:
     def send(self, message): #データの送信のみを行う
         print(f"Send: {message}")
         self.socket.sendall(message.encode("utf-8"))
-        #response = self.socket.recv(1024).decode("utf-8")
-        #print(f"Received: {response}")
         return 
 
     def close(self):
@@ -24,16 +22,16 @@ class Client:
         self.socket.close()
 
 class ClientGUI:
-    def __init__(self, master):
-        self.master = master
-        self.master.title("Othello Client")
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Othello Client")
         self.player_color = None
         self.board_size = 8
         self.cell_size = 50
-        self.canvas = tk.Canvas(self.master, width=self.board_size * self.cell_size, height=self.board_size * self.cell_size)
+        self.canvas = tk.Canvas(self.root, width=self.board_size * self.cell_size, height=self.board_size * self.cell_size)
         self.canvas.grid(row=0, column=0)
         # 自分の色を表示するラベル
-        self.info_label = tk.Label(self.master, text="Your color: (waiting...)")
+        self.info_label = tk.Label(self.root, text="Your color: (waiting...)")
         self.info_label.grid(row=1, column=0)
         self.canvas.bind("<Button-1>", self.handle_click)
 
@@ -43,6 +41,7 @@ class ClientGUI:
         #step2:サーバーから色を割り当てられたことを確認する。   
         self.set_player_color()
         #step3:サーバーから初期盤面データを受信し、初期盤面を描画する。
+        self.create_sidebar()
         self.receive_initialboard_data()
         #step4: 石を置いて、サーバーに送信する(GUIをクリックしたときに、サーバーに送信する)、その結果となる盤面データを受信し、盤面を更新する。→受信したデータを元に盤面を更新し描画する。
         threading.Thread(target=self.receive_updates_loop, daemon=True).start()
@@ -108,18 +107,22 @@ class ClientGUI:
                 response = self.client.socket.recv(1024).decode("utf-8")
                 data = json.loads(response)
                 # GUI更新はメインスレッドに任せる
-                self.master.after(0, self.update_board_from_server, data)
+                if data == "ENDGAME":
+                    self.end_game()
+                self.root.after(0, self.update_board_from_server, data)
             except Exception as e:
                 print(f"Error receiving updates: {e}")
                 break
 
     def update_board_from_server(self, server_response): #受け取ったserver_responseを元に盤面を更新し描画する
         print("Received board update from server")
+        print(f"Received data: {server_response}")
         if not server_response:
             print("No data received from server")
             return
-        #server_response = json.loads(server_response)
-        print(f"Received data: {server_response}")
+        if "error" in server_response:
+            print("Error from server:", server_response["error"])
+            return
         self.board = server_response["board"]
         self.turn = server_response["turn"]
         #print(f"Current board state: {self.board}")
@@ -130,9 +133,9 @@ class ClientGUI:
             for col in range(self.board_size):
                 if self.board[row][col] is not None:
                     self.place_piece(row, col, self.board[row][col])
-        #self.highlight_valid_moves()
-        #self.update_score()
-                
+        #self.update_turn_display()
+        self.highlight_valid_moves()
+        self.update_score()
                 
 
     def first_draw_board(self):
@@ -180,7 +183,110 @@ class ClientGUI:
     def on_close(self):
         print("On close")
         self.client.close()
-        self.master.destroy()
+        self.root.destroy()
+    
+    def update_score(self):
+        black_count = sum(row.count("black") for row in self.board)
+        white_count = sum(row.count("white") for row in self.board)
+        self.score_label.config(text=f"Black: {black_count}  White: {white_count}")
+    
+    def highlight_valid_moves(self):
+        # 前の盤面でのハイライトを削除
+        self.canvas.delete("highlight")
+        has_moves = False
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                if self.is_valid_move(row, col, self.turn):
+                    has_moves = True
+                    x0 = col * self.cell_size + self.cell_size // 2 - 5
+                    y0 = row * self.cell_size + self.cell_size // 2 - 5
+                    x1 = col * self.cell_size + self.cell_size // 2 + 5
+                    y1 = row * self.cell_size + self.cell_size // 2 + 5
+                    self.canvas.create_oval(x0, y0, x1, y1, fill="gray", tags="highlight")
+        if not has_moves:
+            print("Your turn has no valid moves")
+            return
+
+    def pass_turn(self):
+        # パスしたら次のプレイヤーに手番を渡す
+        self.turn = "white" if self.turn == "black" else "black"
+        self.update_turn_display()
+        self.highlight_valid_moves()
+
+        # 次のプレイヤーにも合法手がない場合、ゲームを終了する
+        if not self.has_valid_moves(self.turn):
+            self.end_game()
+
+    def has_valid_moves(self, color):
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                if self.is_valid_move(row, col, color):
+                    return True
+        return False
+    
+    def end_game(self):
+        black_count, white_count = self.count_pieces()
+        if black_count > white_count:
+            winner = "黒の勝利！"
+        elif white_count > black_count:
+            winner = "白の勝利！"
+        else:
+            winner = "引き分け！"
+
+    def update_turn_display(self):
+        self.turn_label.config(text=f"Turn: {self.turn.capitalize()}")
+    
+    def is_valid_move(self, row, col, color):
+        # 既に駒が置かれていれば、Falseを返す。
+        if self.board[row][col] is not None:
+            return False
+        # 八方向（縦、横、斜め）
+        directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
+        # デフォルトをFalseに設定
+        valid = False
+        # 各方向のマスの状態を確認
+        for direction in directions:
+            if self.check_direction(row, col, direction, color):
+                valid = True
+        return valid
+    
+    def check_direction(self, row, col, direction, color):
+        # 相手の駒の色を代入
+        opponent_color = "white" if color == "black" else "black"
+        # 指定の方向のマスを確認
+        d_row, d_col = direction
+        row += d_row
+        col += d_col
+        # 盤面外であれば、Falseを返す
+        if not (0 <= row < self.board_size and 0 <= col < self.board_size):
+            return False
+        # 相手の駒がなければ、Falseを返す
+        if self.board[row][col] != opponent_color:
+            return False
+        while 0 <= row < self.board_size and 0 <= col < self.board_size:
+            # マスがNoneであれば、Falseを返す
+            if self.board[row][col] is None:
+                return False
+            # 自分の駒があれば、Trueを返す
+            if self.board[row][col] == color:
+                return True
+            row += d_row
+            col += d_col
+        return False
+    
+    def create_sidebar(self):
+        self.sidebar = tk.Frame(self.root)
+        self.sidebar.grid(row=0, column=1, sticky="ns")
+
+        self.turn_label = tk.Label(self.sidebar, text="Turn: Black", font=("Helvetica", 14))
+        self.turn_label.pack(pady=10)
+
+        self.score_label = tk.Label(self.sidebar, text="", font=("Helvetica", 14))
+        self.score_label.pack(pady=10)
+    
+    
+    
+
 
 if __name__ == "__main__":
     root = tk.Tk()

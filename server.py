@@ -91,7 +91,6 @@ class Server:
             threading.Thread(target=self.handle_client, args=(client, self.server_address)).start()
 
 
-
         
 
     def broadcast_board(self):
@@ -104,8 +103,7 @@ class Server:
     def handle_client(self, conn, addr):
         print(f"Handling client {addr}")
         try:
-            while True:
-                
+            while True: 
                 data = conn.recv(1024) #clientが打った手を受信する予定、x,y,turnの情報を受信できるかどうかは確認する必要がある。
                 print(f"Received data from {addr}: {data}")
                 move = json.loads(data.decode())
@@ -116,7 +114,7 @@ class Server:
                     self.game.turn = "white" if turn == "black" else "black"
                     self.broadcast_board()
                 else:
-                    conn.sendall(json.dumps({"error": "Invalid move"}).encode())
+                    conn.sendall(json.dumps("ENDGAME").encode())
         except Exception as e:
             print(f"Error handling client {addr}: {e}")
         finally: #try抜けたら確実に実行される処理
@@ -154,7 +152,6 @@ class Server:
             self.player_color_list.append((conn, check_player_color))
             self.clients.append(conn) 
             
-            #self.broadcast_board()
             if len(self.player_color_list) == 2:
                 break
         return 

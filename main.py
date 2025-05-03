@@ -163,6 +163,7 @@ class OthelloGame:
         return False
 
     def pass_turn(self):
+        print("pass turn")
         # パスしたら次のプレイヤーに手番を渡す
         self.turn = "white" if self.turn == "black" else "black"
         self.update_turn_display()
