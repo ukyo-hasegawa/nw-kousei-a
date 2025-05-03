@@ -26,6 +26,7 @@ class ClientGUI:
         self.root = root
         self.root.title("Othello Client")
         self.player_color = None
+        self.turn = "black"
         self.board_size = 8
         self.cell_size = 50
         self.canvas = tk.Canvas(self.root, width=self.board_size * self.cell_size, height=self.board_size * self.cell_size)
@@ -43,6 +44,8 @@ class ClientGUI:
         #step3:サーバーから初期盤面データを受信し、初期盤面を描画する。
         self.create_sidebar()
         self.receive_initialboard_data()
+        self.surrender_button = tk.Button(self.root, text="Surrender", command=self.surrender)
+        self.surrender_button.grid(row=2, column=0)
         #step4: 石を置いて、サーバーに送信する(GUIをクリックしたときに、サーバーに送信する)、その結果となる盤面データを受信し、盤面を更新する。→受信したデータを元に盤面を更新し描画する。
         threading.Thread(target=self.receive_updates_loop, daemon=True).start()
     
@@ -55,6 +58,13 @@ class ClientGUI:
         self.board[3][4] = "black"
         self.board[4][3] = "black"
         self.board[4][4] = "white"
+    
+    def surrender(self):
+        if self.player_color:
+            message = json.dumps({"surrender": self.player_color})
+            self.client.send(message)
+            self.info_label.config(text="You surrendered.")
+            self.canvas.unbind("<Button-1>")  # クリック操作無効化
 
     def handle_click(self, event):
         print("Handle click")
@@ -106,6 +116,12 @@ class ClientGUI:
             try:
                 response = self.client.socket.recv(1024).decode("utf-8")
                 data = json.loads(response)
+                if "end" in data:
+                    winner = data["end"]
+                    print(winner)
+                    #messagebox.showinfo("Game Over", data["end"])
+                    self.canvas.unbind("<Button-1>")
+                    exit()
                 # GUI更新はメインスレッドに任せる
                 if data == "ENDGAME":
                     self.end_game()
@@ -126,14 +142,14 @@ class ClientGUI:
         self.board = server_response["board"]
         self.turn = server_response["turn"]
         #print(f"Current board state: {self.board}")
-        #print(f"Turn: {self.turn}")
+        print(f"Turn: {self.turn}")
         self.canvas.delete("piece")
         self.draw_board_line()
         for row in range(self.board_size):
             for col in range(self.board_size):
                 if self.board[row][col] is not None:
                     self.place_piece(row, col, self.board[row][col])
-        #self.update_turn_display()
+        self.update_turn_display()
         self.highlight_valid_moves()
         self.update_score()
                 
@@ -204,8 +220,7 @@ class ClientGUI:
                     y1 = row * self.cell_size + self.cell_size // 2 + 5
                     self.canvas.create_oval(x0, y0, x1, y1, fill="gray", tags="highlight")
         if not has_moves:
-            print("Your turn has no valid moves")
-            return
+            print(f"{self.turn.capitalize()} has no valid moves")
 
     def pass_turn(self):
         # パスしたら次のプレイヤーに手番を渡す

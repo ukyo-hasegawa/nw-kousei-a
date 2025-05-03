@@ -48,21 +48,21 @@ class OthelloGame:
             col += d_col
         return False
 
-    def flip_pieces(self, row, col):
+    def flip_pieces(self, row, col, turn):
         print("flip_pieces")
         directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
         for direction in directions:
-            if self.check_direction(row, col, direction, self.turn):
-                self.flip_in_direction(row, col, direction)
+            if self.check_direction(row, col, direction, turn):
+                self.flip_in_direction(row, col, direction, turn)
 
-    def flip_in_direction(self, row, col, direction):
+    def flip_in_direction(self, row, col, direction, turn):
         print("flip_in_direction")
-        opponent_color = "white" if self.turn == "black" else "black"
+        opponent_color = "white" if turn == "black" else "black"
         d_row, d_col = direction
         row += d_row
         col += d_col
         while self.board[row][col] == opponent_color:
-            self.board[row][col] = self.turn
+            self.board[row][col] = turn
             row += d_row
             col += d_col
 
@@ -84,7 +84,7 @@ class Server:
 
         #step3:クライアントが初期盤面データ(json形式)を待っているんで送信する。
         self.game.initialize_board()
-        self.broadcast_board()
+        self.broadcast_board(self.game.turn)
 
         #step4: クライアントからの手を受け取る。→受け取った手が有効な手であれば、盤面を更新し、クライアントに盤面データを送信する。無効な手であれば、エラーメッセージを送信する。
         for client in self.clients:
@@ -93,12 +93,19 @@ class Server:
 
         
 
-    def broadcast_board(self):
+    def broadcast_board(self, turn):
         print("Broadcast board")
-        data = json.dumps({"board": self.game.board, "turn": self.game.turn}).encode() #ここのturnは、サーバー側で管理しているターンの情報を送信するためのもの。
+        data = json.dumps({"board": self.game.board, "turn": turn}).encode() #ここのturnは、サーバー側で管理しているターンの情報を送信するためのもの。
         for client in self.clients:
             client.sendall(data) #client 2人に送信
             print(f"Broadcasting data: {data}")
+    
+    def broadcast_end_message(self, winner, reason):
+        message = json.dumps({
+            "end": f"{winner} wins by {reason}"
+        }).encode()
+        for client in self.clients:
+            client.sendall(message)
 
     def handle_client(self, conn, addr):
         print(f"Handling client {addr}")
@@ -107,12 +114,21 @@ class Server:
                 data = conn.recv(1024) #clientが打った手を受信する予定、x,y,turnの情報を受信できるかどうかは確認する必要がある。
                 print(f"Received data from {addr}: {data}")
                 move = json.loads(data.decode())
+                # 👇 ここを追加（降参処理）
+                if "surrender" in move:
+                    surrender_player = move["surrender"]
+                    winner = "white" if surrender_player == "black" else "black"
+                    self.broadcast_end_message(winner, f"surrender from {surrender_player}")
+                    break  # クライアントループを抜ける
                 x, y, turn = move["x"], move["y"], move["turn"]
+                # クリック位置が正しくない場合は、無効
+                if not (0 <= x < self.game.board_size and 0 <= y < self.game.board_size):
+                    return
                 if self.game.is_valid_move(y, x, turn):
                     self.game.board[y][x] = turn
-                    self.game.flip_pieces(y, x)
+                    self.game.flip_pieces(y, x, turn)
                     self.game.turn = "white" if turn == "black" else "black"
-                    self.broadcast_board()
+                    self.broadcast_board(self.game.turn)
                 else:
                     conn.sendall(json.dumps("ENDGAME").encode())
         except Exception as e:
