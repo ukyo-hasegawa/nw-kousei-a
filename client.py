@@ -130,9 +130,9 @@ class ClientGUI:
             for col in range(self.board_size):
                 if self.board[row][col] is not None:
                     self.place_piece(row, col, self.board[row][col])
-        #self.update_turn_display()
         #self.highlight_valid_moves()
         #self.update_score()
+                
                 
 
     def first_draw_board(self):
