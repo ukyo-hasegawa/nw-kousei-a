@@ -4,7 +4,7 @@ import json
 import threading
 
 PORT = 8080
-SERVER_IP = "local_address" #端末のローカルIPアドレス
+SERVER_IP = "local_IP" #端末のローカルIPアドレス
 
 class Client:
     def __init__(self, host=SERVER_IP, port=PORT):
@@ -28,7 +28,7 @@ class ClientGUI:
         self.root.title("Othello Client")
         self.player_color = None
         self.turn = "black"
-        self.board_size = 4 #簡易版のため、4*4
+        self.board_size = 8 #簡易版のため、4*4
         self.cell_size = 50
         self.canvas = tk.Canvas(self.root, width=self.board_size * self.cell_size, height=self.board_size * self.cell_size)
         self.canvas.grid(row=0, column=0)
@@ -129,16 +129,18 @@ class ClientGUI:
             try:
                 response = self.client.socket.recv(1024).decode("utf-8")
                 data = json.loads(response)
-                if "end" in data:
-                    winner = data["end"]
-                    print(winner)
-                    #messagebox.showinfo("Game Over", data["end"])
-                    self.canvas.unbind("<Button-1>")
-                    exit()
-                # GUI更新はメインスレッドに任せる
-                #if data == "ENDGAME":
-                #    self.end_game()
-                self.root.after(0, self.update_board_from_server, data)
+
+                #打つ手なし、パスするパターン
+                if data["case"]== "PASS":
+                    self.pass_turn()
+                    
+                #盤面が埋まったので終了するパターン
+                if data["case"]== "FINISH":
+                    self.end_game()
+
+                #問題なし、game続行
+                if data["case"]== "CONTINUE":
+                    self.root.after(0, self.update_board_from_server, data)
             except Exception as e:
                 print(f"Error receiving updates loop: {e}")
                 break
@@ -159,7 +161,7 @@ class ClientGUI:
         ):
             self.pass_turn()
         
-        if "ENDGAME" == server_response:
+        if "ENDGAME" in server_response:
             print("Called ENDGAME")
             return
         self.board = server_response["board"]
@@ -175,6 +177,44 @@ class ClientGUI:
         self.update_turn_display()
         self.highlight_valid_moves()
         self.update_score()
+    
+    def is_valid_move(self, row, col, color):
+        # 既に駒が置かれていれば、Falseを返す。
+        if self.board[row][col] is not None:
+            return False
+        # 八方向（縦、横、斜め）
+        directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
+        # デフォルトをFalseに設定
+        valid = False
+        # 各方向のマスの状態を確認
+        for direction in directions:
+            if self.check_direction(row, col, direction, color):
+                valid = True
+        return valid
+    
+    def check_direction(self, row, col, direction, color):
+        # 相手の駒の色を代入
+        opponent_color = "white" if color == "black" else "black"
+        # 指定の方向のマスを確認
+        d_row, d_col = direction
+        row += d_row
+        col += d_col
+        # 盤面外であれば、Falseを返す
+        if not (0 <= row < self.board_size and 0 <= col < self.board_size):
+            return False
+        # 相手の駒がなければ、Falseを返す
+        if self.board[row][col] != opponent_color:
+            return False
+        while 0 <= row < self.board_size and 0 <= col < self.board_size:
+            # マスがNoneであれば、Falseを返す
+            if self.board[row][col] is None:
+                return False
+            # 自分の駒があれば、Trueを返す
+            if self.board[row][col] == color:
+                return True
+            row += d_row
+            col += d_col
+        return False
                 
 
     def first_draw_board(self):
@@ -244,6 +284,7 @@ class ClientGUI:
                     self.canvas.create_oval(x0, y0, x1, y1, fill="gray", tags="highlight")
         if not has_moves:
             print(f"{self.turn.capitalize()} has no valid moves")
+            #打つ手なしということをserverに伝える。
 
     def pass_turn(self):
         print(f"--------------------Pass turn:{self.player_color} !!!!!!!!!!!!!!!!----------------------")
@@ -265,7 +306,6 @@ class ClientGUI:
         return False
     
     def end_game(self):
-        print("end_game()")
         black_count, white_count = self.count_pieces()
         if black_count > white_count:
             winner = "黒の勝利！"
@@ -273,6 +313,14 @@ class ClientGUI:
             winner = "白の勝利！"
         else:
             winner = "引き分け！"
+
+        self.canvas.create_text(
+            self.board_size * self.cell_size // 2,
+            self.board_size * self.cell_size // 2,
+            text=f"{winner}",
+            font=("Helvetica", 36),
+            fill="red"
+        )
     
     def count_pieces(self):
         black_count = 0
@@ -287,45 +335,7 @@ class ClientGUI:
 
     def update_turn_display(self):
         self.turn_label.config(text=f"Turn: {self.turn.capitalize()}")
-    
-    def is_valid_move(self, row, col, color):
-        # 既に駒が置かれていれば、Falseを返す。
-        if self.board[row][col] is not None:
-            return False
-        # 八方向（縦、横、斜め）
-        directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
-        # デフォルトをFalseに設定
-        valid = False
-        # 各方向のマスの状態を確認
-        for direction in directions:
-            if self.check_direction(row, col, direction, color):
-                valid = True
-        return valid
-    
-    def check_direction(self, row, col, direction, color):
-        # 相手の駒の色を代入
-        opponent_color = "white" if color == "black" else "black"
-        # 指定の方向のマスを確認
-        d_row, d_col = direction
-        row += d_row
-        col += d_col
-        # 盤面外であれば、Falseを返す
-        if not (0 <= row < self.board_size and 0 <= col < self.board_size):
-            return False
-        # 相手の駒がなければ、Falseを返す
-        if self.board[row][col] != opponent_color:
-            return False
-        while 0 <= row < self.board_size and 0 <= col < self.board_size:
-            # マスがNoneであれば、Falseを返す
-            if self.board[row][col] is None:
-                return False
-            # 自分の駒があれば、Trueを返す
-            if self.board[row][col] == color:
-                return True
-            row += d_row
-            col += d_col
-        return False
-    
+        
     def create_sidebar(self):
         self.sidebar = tk.Frame(self.root)
         self.sidebar.grid(row=0, column=1, sticky="ns")
