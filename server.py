@@ -91,7 +91,7 @@ class OthelloGame:
     def judge_check(self):
         print("judge_check")
         """
-        ゲームが終了しているか確認する関数,client.pyで実装されているpass_turn()からのend_game()に関してはちょっとよく分からなかった。
+        ゲームが終了しているか確認する関数
         盤面確認してNoneが存在しない(全て黒か白の石が置かれた)状態かどうかを確認。
         """
         for row in self.board:
@@ -140,14 +140,6 @@ class Server:
         print(f"send_data:{data}")
         for client in self.clients:
             client.sendall(data) #client 2人に送信
-            
-    
-    def broadcast_end_message(self, winner, reason):
-        message = json.dumps({
-            "end": f"{winner} wins by {reason}"
-        }).encode()
-        for client in self.clients:
-            client.sendall(message)
 
     #ゲーム終了をクライアントへ送信
     def send_finish_message(self):
@@ -228,9 +220,9 @@ class Server:
             print(f"Client connected: {addr}") #ここで接続したクライアントのIPアドレスを表示する。
 
             # プレイヤーカラーを決定
-            if len(self.clients) == 0:
+            if len(self.clients) % 2 == 0:
                 player_color = "black"
-            elif len(self.clients) == 1:
+            elif len(self.clients) % 2 == 1:
                 player_color = "white"
             else:
                 conn.sendall(json.dumps({"error": "Game already has 2 players"}).encode())
@@ -249,7 +241,7 @@ class Server:
                 print(f"Received player color confirmation from {addr}: {check_player_color}")
             self.player_color_list.append((conn, check_player_color))
             self.clients.append(conn) 
-            
+            #2人から色の確認が取れたらループを抜ける
             if len(self.player_color_list) == 2:    
                 break
         return 

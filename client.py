@@ -45,8 +45,6 @@ class ClientGUI:
         #step3:サーバーから初期盤面データを受信し、初期盤面を描画する。
         self.create_sidebar()
         self.receive_initialboard_data()
-        self.surrender_button = tk.Button(self.root, text="Surrender", command=self.surrender)
-        self.surrender_button.grid(row=2, column=0)
         self.update_turn_display()
         self.update_score()
         self.highlight_valid_moves()
@@ -62,13 +60,6 @@ class ClientGUI:
         self.board[3][4] = "black"
         self.board[4][3] = "black"
         self.board[4][4] = "white"
-    
-    def surrender(self):
-        if self.player_color:
-            message = json.dumps({"surrender": self.player_color})
-            self.client.send(message)
-            self.info_label.config(text="You surrendered.")
-            self.canvas.unbind("<Button-1>")  # クリック操作無効化
 
     def handle_click(self, event):
         print("Handle click")
