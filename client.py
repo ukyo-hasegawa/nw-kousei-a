@@ -4,6 +4,7 @@ import json
 import threading
 
 PORT = 8080
+SERVER_IP = "192.168.2.106" #macのローカルIPアドレス
 
 class Client:
     def __init__(self, host="127.0.0.1", port=PORT):
@@ -27,7 +28,7 @@ class ClientGUI:
         self.root.title("Othello Client")
         self.player_color = None
         self.turn = "black"
-        self.board_size = 8
+        self.board_size = 4 #簡易版のため、4*4
         self.cell_size = 50
         self.canvas = tk.Canvas(self.root, width=self.board_size * self.cell_size, height=self.board_size * self.cell_size)
         self.canvas.grid(row=0, column=0)
@@ -46,6 +47,9 @@ class ClientGUI:
         self.receive_initialboard_data()
         self.surrender_button = tk.Button(self.root, text="Surrender", command=self.surrender)
         self.surrender_button.grid(row=2, column=0)
+        self.update_turn_display()
+        self.update_score()
+        self.highlight_valid_moves()
         #step4: 石を置いて、サーバーに送信する(GUIをクリックしたときに、サーバーに送信する)、その結果となる盤面データを受信し、盤面を更新する。→受信したデータを元に盤面を更新し描画する。
         threading.Thread(target=self.receive_updates_loop, daemon=True).start()
     
@@ -70,6 +74,15 @@ class ClientGUI:
         print("Handle click")
         col = event.x // self.cell_size
         row = event.y // self.cell_size
+
+        # クリック位置が正しくない場合は、無効
+        if not (0 <= col < self.board_size and 0 <= row < self.board_size):
+            return
+        #自分のターンでない場合は、無効
+        if self.turn != self.player_color:
+            print("Not your turn!!!!")
+            return
+
         if self.board[row][col] is None:
             move = {"x": col, "y": row, "turn": self.player_color}
             self.client.send(json.dumps(move))
@@ -106,7 +119,7 @@ class ClientGUI:
                 print("No data received from server")
                 return
             data = json.loads(response)
-            print(f"Received data: {data}") #受信したデータの確認
+            #print(f"Received data: {data}") #受信したデータの確認
             self.update_board(data) #初期盤面を描画
         except Exception as e:
             print(f"Error received initial board: {e}")
@@ -123,11 +136,11 @@ class ClientGUI:
                     self.canvas.unbind("<Button-1>")
                     exit()
                 # GUI更新はメインスレッドに任せる
-                if data == "ENDGAME":
-                    self.end_game()
+                #if data == "ENDGAME":
+                #    self.end_game()
                 self.root.after(0, self.update_board_from_server, data)
             except Exception as e:
-                print(f"Error receiving updates: {e}")
+                print(f"Error receiving updates loop: {e}")
                 break
 
     def update_board_from_server(self, server_response): #受け取ったserver_responseを元に盤面を更新し描画する
@@ -138,6 +151,16 @@ class ClientGUI:
             return
         if "error" in server_response:
             print("Error from server:", server_response["error"])
+            return
+        if not any( #合法手があるのかどうか走査
+            self.is_valid_move(row, col, self.turn)
+            for row in range(self.board_size)
+            for col in range(self.board_size)
+        ):
+            self.pass_turn()
+        
+        if "ENDGAME" == server_response:
+            print("Called ENDGAME")
             return
         self.board = server_response["board"]
         self.turn = server_response["turn"]
@@ -174,7 +197,7 @@ class ClientGUI:
                     self.place_piece(row, col, self.board[row][col])
 
     def place_piece(self, row, col, color):
-        print("Place piece")
+        #print("Place piece")
         x0 = col * self.cell_size + self.cell_size // 4
         y0 = row * self.cell_size + self.cell_size // 4
         x1 = (col + 1) * self.cell_size - self.cell_size // 4
@@ -223,6 +246,7 @@ class ClientGUI:
             print(f"{self.turn.capitalize()} has no valid moves")
 
     def pass_turn(self):
+        print(f"--------------------Pass turn:{self.player_color} !!!!!!!!!!!!!!!!----------------------")
         # パスしたら次のプレイヤーに手番を渡す
         self.turn = "white" if self.turn == "black" else "black"
         self.update_turn_display()
@@ -233,6 +257,7 @@ class ClientGUI:
             self.end_game()
 
     def has_valid_moves(self, color):
+        print("has_valid_moves")
         for row in range(self.board_size):
             for col in range(self.board_size):
                 if self.is_valid_move(row, col, color):
@@ -240,6 +265,7 @@ class ClientGUI:
         return False
     
     def end_game(self):
+        print("end_game()")
         black_count, white_count = self.count_pieces()
         if black_count > white_count:
             winner = "黒の勝利！"
@@ -247,6 +273,17 @@ class ClientGUI:
             winner = "白の勝利！"
         else:
             winner = "引き分け！"
+    
+    def count_pieces(self):
+        black_count = 0
+        white_count = 0
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                if self.board[row][col] == "black":
+                    black_count += 1
+                elif self.board[row][col] == "white":
+                    white_count += 1
+        return black_count, white_count
 
     def update_turn_display(self):
         self.turn_label.config(text=f"Turn: {self.turn.capitalize()}")
