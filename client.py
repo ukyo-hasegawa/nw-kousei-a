@@ -4,7 +4,7 @@ import json
 import threading
 
 PORT = 8080
-SERVER_IP = "192.168.2.106" #macのローカルIPアドレス
+SERVER_IP = "" #端末のローカルIPアドレス
 
 class Client:
     def __init__(self, host=SERVER_IP, port=PORT):
