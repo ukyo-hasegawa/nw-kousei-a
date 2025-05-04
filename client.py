@@ -4,7 +4,7 @@ import json
 import threading
 
 PORT = 8080
-SERVER_IP = "local_IP" #端末のローカルIPアドレス
+SERVER_IP = "192.168.2.106" #macのローカルIPアドレス
 
 class Client:
     def __init__(self, host=SERVER_IP, port=PORT):
@@ -132,10 +132,13 @@ class ClientGUI:
 
                 #打つ手なし、パスするパターン
                 if data["case"]== "PASS":
+                    self.root.after(0, self.update_board_from_server, data)
                     self.pass_turn()
                     
                 #盤面が埋まったので終了するパターン
                 if data["case"]== "FINISH":
+                    #最終的な盤面の描画
+                    self.root.after(0, self.update_board_from_server, data)
                     self.end_game()
 
                 #問題なし、game続行
@@ -154,16 +157,7 @@ class ClientGUI:
         if "error" in server_response:
             print("Error from server:", server_response["error"])
             return
-        if not any( #合法手があるのかどうか走査
-            self.is_valid_move(row, col, self.turn)
-            for row in range(self.board_size)
-            for col in range(self.board_size)
-        ):
-            self.pass_turn()
-        
-        if "ENDGAME" in server_response:
-            print("Called ENDGAME")
-            return
+       
         self.board = server_response["board"]
         self.turn = server_response["turn"]
         #print(f"Current board state: {self.board}")
@@ -295,6 +289,7 @@ class ClientGUI:
 
         # 次のプレイヤーにも合法手がない場合、ゲームを終了する
         if not self.has_valid_moves(self.turn):
+
             self.end_game()
 
     def has_valid_moves(self, color):
@@ -306,6 +301,7 @@ class ClientGUI:
         return False
     
     def end_game(self):
+
         black_count, white_count = self.count_pieces()
         if black_count > white_count:
             winner = "黒の勝利！"
