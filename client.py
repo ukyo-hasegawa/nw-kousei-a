@@ -4,10 +4,10 @@ import json
 import threading
 
 PORT = 8080
-SERVER_IP = "192.168.2.106" #macのローカルIPアドレス
+SERVER_IP = "local_address" #端末のローカルIPアドレス
 
 class Client:
-    def __init__(self, host="127.0.0.1", port=PORT):
+    def __init__(self, host=SERVER_IP, port=PORT):
         self.server = (host, port)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect(self.server)
