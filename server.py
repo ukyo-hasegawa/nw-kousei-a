@@ -152,7 +152,17 @@ class Server:
         print(f"Handling client {addr}")
         try:
             while True: 
-                data = conn.recv(1024) #clientが打った手を受信
+                try:
+                    data = conn.recv(1024)
+                    if not data:
+                        print("切断されました")
+                        self.game.case = "FORCED_TERMINATION"
+                        self.broadcast_board(self.game.turn,self.game.case)
+
+                        break
+                except (ConnectionResetError, BrokenPipeError):
+                    print("接続が失われました")
+                    break
                 #print(f"Received data from {addr}: {data}")
                 move = json.loads(data.decode())
 

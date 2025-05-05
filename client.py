@@ -120,22 +120,40 @@ class ClientGUI:
         while True:
             try:
                 response = self.client.socket.recv(1024).decode("utf-8")
+
+                if not response:
+                    print("サーバーとの接続が切断されました。ゲームを終了いたします。")
+                    self.end_game()
+                    return 
+
                 data = json.loads(response)
 
+                #片方の接続が切れた、強制終了のパターン
+                if data["case"] == "FORCED_TERMINATION":
+                    print("disconnected player")
+                    self.end_game()
+                    exit()
+
                 #打つ手なし、パスするパターン
-                if data["case"]== "PASS":
+                if data["case"] == "PASS":
                     self.root.after(0, self.update_board_from_server, data)
                     self.pass_turn()
                     
                 #盤面が埋まったので終了するパターン
-                if data["case"]== "FINISH":
+                if data["case"] == "FINISH":
                     #最終的な盤面の描画
                     self.root.after(0, self.update_board_from_server, data)
                     self.end_game()
 
                 #問題なし、game続行
-                if data["case"]== "CONTINUE":
+                if data["case"] == "CONTINUE":
                     self.root.after(0, self.update_board_from_server, data)
+
+            except json.JSONDecodeError:
+                print("received data is wrong. End game.")
+                self.end_game()
+                break
+
             except Exception as e:
                 print(f"Error receiving updates loop: {e}")
                 break
