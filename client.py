@@ -2,12 +2,13 @@ import socket
 import tkinter as tk
 import json
 import threading
+import argparse  # 追加: コマンドライン引数を扱う
 
 PORT = 8080
 SERVER_IP = "" #端末のローカルIPアドレス
 
 class Client:
-    def __init__(self, host=SERVER_IP, port=PORT):
+    def __init__(self, host, port=PORT):  # hostは必須引数に変更
         self.server = (host, port)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect(self.server)
@@ -23,7 +24,7 @@ class Client:
         self.socket.close()
 
 class ClientGUI:
-    def __init__(self, root):
+    def __init__(self, root, host, port):  # hostとportを受け取る
         self.root = root
         self.root.title("Othello Client")
         self.player_color = None
@@ -39,7 +40,7 @@ class ClientGUI:
 
 
         #step1:サーバーに接続し接続できたことを出力
-        self.client = Client()
+        self.client = Client(host, port)
         #step2:サーバーから色を割り当てられたことを確認する。   
         self.set_player_color()
         #step3:サーバーから初期盤面データを受信し、初期盤面を描画する。
@@ -338,7 +339,11 @@ class ClientGUI:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Othello Client")
+    parser.add_argument("-s", "--server", default="127.0.0.1", help="Server IP address")
+    parser.add_argument("-p", "--port", type=int, default=PORT, help="Server port")
+    args = parser.parse_args()
     root = tk.Tk()
-    gui = ClientGUI(root)
+    gui = ClientGUI(root, args.server, args.port)
     root.protocol("WM_DELETE_WINDOW", gui.on_close)
     root.mainloop()
