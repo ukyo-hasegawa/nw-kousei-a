@@ -3,16 +3,47 @@ import tkinter as tk
 import json
 import threading
 import argparse  # 追加: コマンドライン引数を扱う
+import time   # リトライ時の待機のため追加
+import signal # Ctrl+Cによる終了処理のため追加 (念のため確認)
+import sys    # sys.exitのため追加 (念のため確認)
 
 PORT = 8080
 SERVER_IP = "" #端末のローカルIPアドレス
+MAX_CONNECT_RETRIES = 3
+CONNECT_RETRY_DELAY = 5 # seconds
+CONNECT_TIMEOUT = 10 # seconds
 
 class Client:
     def __init__(self, host, port=PORT):  # hostは必須引数に変更
         self.server = (host, port)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect(self.server)
-        print(f"Connected to server at {self.server}") # サーバーに接続できたことを出力
+        
+        connected = False
+        for attempt in range(MAX_CONNECT_RETRIES):
+            try:
+                print(f"サーバーへの接続試行中 ({attempt + 1}/{MAX_CONNECT_RETRIES})... {self.server}")
+                self.socket.settimeout(CONNECT_TIMEOUT) # 接続タイムアウト設定
+                self.socket.connect(self.server)
+                self.socket.settimeout(None) # 通常のブロッキングモードに戻す
+                print(f"サーバーに接続しました: {self.server}")
+                connected = True
+                break
+            except socket.timeout:
+                print(f"接続試行 ({attempt + 1}) がタイムアウトしました。")
+            except (socket.error, ConnectionRefusedError) as e: # ConnectionRefusedError も捕捉
+                print(f"接続試行 ({attempt + 1}) に失敗しました: {e}")
+            
+            if attempt < MAX_CONNECT_RETRIES - 1:
+                print(f"{CONNECT_RETRY_DELAY}秒後に再試行します...")
+                # ソケットを再作成する必要がある場合がある
+                self.socket.close() # 古いソケットを閉じる
+                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # 新しいソケットを作成
+                time.sleep(CONNECT_RETRY_DELAY)
+        
+        if not connected:
+            print("サーバーへの接続に最終的に失敗しました。")
+            # GUIに通知するために例外を発生させる
+            raise ConnectionError("サーバーへの接続に失敗しました。リトライ上限に達しました。")
 
     def send(self, message): #データの送信のみを行う
         print(f"Send: {message}")
@@ -45,11 +76,26 @@ class ClientGUI:
         threading.Thread(target=self.connect_and_setup_game, daemon=True).start()
 
     def connect_and_setup_game(self):
-        #step1:サーバーに接続し接続できたことを出力
-        self.client = Client(self.host, self.port)
+        try:
+            #step1:サーバーに接続し接続できたことを出力
+            self.client = Client(self.host, self.port)
+        except ConnectionError as e:
+            error_message = f"サーバー接続エラー: {e}\nリトライ上限に達しました。"
+            self.info_label.config(text=error_message, wraplength=self.board_size * self.cell_size) # メッセージが長い場合に折り返す
+            print(f"ClientGUI: {error_message}")
+            # 終了ボタンを作成して表示
+            self.exit_button = tk.Button(self.root, text="終了", command=self.on_close)
+            # info_label の下に配置するか、別の場所に配置するか検討
+            # ここでは info_label の下 (row=2) に配置
+            self.exit_button.grid(row=2, column=0, pady=10)
+            return
+
         #step2:サーバーから色を割り当てられたことを確認する。
+        # サーバー接続が成功した場合のみ、色設定に進む
         if not self.set_player_color(): # 色設定が失敗したら終了
-            self.info_label.config(text="サーバー接続または色割り当てに失敗しました。")
+            # set_player_color内でエラーメッセージが表示されるか、ここで設定
+            if "サーバー接続または色割り当てに失敗しました。" not in self.info_label.cget("text"):
+                 self.info_label.config(text="サーバーからの色割り当てに失敗しました。")
             return
         # サーバーから初期盤面データを受信するまで、マッチング中のラベルを表示
         self.info_label.config(text=f"あなたの色: {self.player_color} - 対戦相手を待っています...")
@@ -280,11 +326,46 @@ class ClientGUI:
             # 縦線
             self.canvas.create_line(i * self.cell_size, 0, i * self.cell_size, self.board_size * self.cell_size, fill="black")
 
-    def on_close(self):
-        print("On close")
-        self.client.close()
-        self.root.destroy()
-    
+    def on_close(self, signal_received=None, frame=None): # シグナルハンドラ対応済みの想定
+        if signal_received:
+            print(f"シグナル {signal_received} を受信しました。終了処理を行います...")
+        else:
+            print("終了処理が呼び出されました...") # ウィンドウクローズまたはボタンクリック
+        
+        try:
+            if hasattr(self, 'client') and self.client and hasattr(self.client, 'socket') and self.client.socket:
+                # ソケットが既に閉じているか確認してからクローズを試みる
+                if self.client.socket.fileno() != -1:
+                    print("クライアントソケットをクローズします。")
+                    self.client.close()
+                else:
+                    print("クライアントソケットは既にクローズされています。")
+            else:
+                print("クライアントオブジェクトまたはソケットが存在しません。")
+        except Exception as e:
+            print(f"ソケットクローズ中にエラーが発生しました: {e}")
+        finally:
+            if hasattr(self, 'root') and self.root:
+                try:
+                    # ウィンドウが存在するか確認してから破棄
+                    if self.root.winfo_exists():
+                        print("Tkinterウィンドウを破棄します。")
+                        self.root.destroy()
+                    else:
+                        print("Tkinterウィンドウは既に破棄されています。")
+                except tk.TclError as e:
+                    print(f"ウィンドウ破棄中にTclエラー: {e} (無視します)") # よくあるエラーなので無視
+            if signal_received: # シグナルで終了した場合、明示的にプロセスを終了
+                print("プロセスを終了します。")
+                sys.exit(0)
+            elif not signal_received and hasattr(self, 'exit_button') and self.exit_button.winfo_exists():
+                # ボタン経由で終了した場合、プロセスを終了させる (Ctrl+Cの場合と挙動を合わせる)
+                # ただし、mainloopが終了すれば通常はプロセスも終了するはず
+                # Tkinterのmainloopが正常に終了すれば不要な場合もある
+                print("ボタン経由での終了。プロセスを終了します。")
+                sys.exit(0)
+
+
     def update_score(self):
         black_count = sum(row.count("black") for row in self.board)
         white_count = sum(row.count("white") for row in self.board)
@@ -374,11 +455,19 @@ class ClientGUI:
 
 
 if __name__ == "__main__":
+    # signal と sys のインポートはファイルの先頭に配置
+    import signal
+    import sys
     parser = argparse.ArgumentParser(description="Othello Client")
     parser.add_argument("-s", "--server", default="127.0.0.1", help="Server IP address")
     parser.add_argument("-p", "--port", type=int, default=PORT, help="Server port")
     args = parser.parse_args()
     root = tk.Tk()
     gui = ClientGUI(root, args.server, args.port)
+
+    # SIGINT (Ctrl+C) のハンドラを設定
+    # lambdaを使用して、gui.on_close に引数を渡せるようにする
+    signal.signal(signal.SIGINT, lambda sig, frame: gui.on_close(sig, frame))
+
     root.protocol("WM_DELETE_WINDOW", gui.on_close)
     root.mainloop()
