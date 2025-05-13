@@ -52,7 +52,7 @@ class ClientGUI:
             self.info_label.config(text="サーバー接続または色割り当てに失敗しました。")
             return
         # サーバーから初期盤面データを受信するまで、マッチング中のラベルを表示
-        self.info_label.config(text=f"Your color: {self.player_color} - 対戦相手を待っています...")
+        self.info_label.config(text=f"あなたの色: {self.player_color} - 対戦相手を待っています...")
 
         #step3:サーバーから初期盤面データを受信し、初期盤面を描画する。
         self.create_sidebar()
