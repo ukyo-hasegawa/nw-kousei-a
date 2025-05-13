@@ -34,24 +34,37 @@ class ClientGUI:
         self.canvas = tk.Canvas(self.root, width=self.board_size * self.cell_size, height=self.board_size * self.cell_size)
         self.canvas.grid(row=0, column=0)
         # 自分の色を表示するラベル
-        self.info_label = tk.Label(self.root, text="Your color: (waiting...)")
+        self.info_label = tk.Label(self.root, text="マッチング中...") # 初期表示を「マッチング中...」に変更
         self.info_label.grid(row=1, column=0)
         self.canvas.bind("<Button-1>", self.handle_click)
 
+        self.host = host
+        self.port = port
 
+        # マッチング処理を別スレッドで開始
+        threading.Thread(target=self.connect_and_setup_game, daemon=True).start()
+
+    def connect_and_setup_game(self):
         #step1:サーバーに接続し接続できたことを出力
-        self.client = Client(host, port)
-        #step2:サーバーから色を割り当てられたことを確認する。   
-        self.set_player_color()
+        self.client = Client(self.host, self.port)
+        #step2:サーバーから色を割り当てられたことを確認する。
+        if not self.set_player_color(): # 色設定が失敗したら終了
+            self.info_label.config(text="サーバー接続または色割り当てに失敗しました。")
+            return
+        # サーバーから初期盤面データを受信するまで、マッチング中のラベルを表示
+        self.info_label.config(text=f"あなたの色: {self.player_color} - 対戦相手を待っています...")
+
         #step3:サーバーから初期盤面データを受信し、初期盤面を描画する。
         self.create_sidebar()
         self.receive_initialboard_data()
         self.update_turn_display()
         self.update_score()
         self.highlight_valid_moves()
+        # マッチング中のラベルを非表示、自分の色を表示
+        self.info_label.config(text=f"Your color: {self.player_color} ")
         #step4: 石を置いて、サーバーに送信する(GUIをクリックしたときに、サーバーに送信する)、その結果となる盤面データを受信し、盤面を更新する。→受信したデータを元に盤面を更新し描画する。
         threading.Thread(target=self.receive_updates_loop, daemon=True).start()
-    
+
     def initialize_board(self):
         # 盤面を空に初期化
         self.board = [[None for _ in range(self.board_size)] for _ in range(self.board_size)]
@@ -95,14 +108,18 @@ class ClientGUI:
                     #self.client.send(json.dumps(self.player_color))
                     #setting okということをサーバーに通知
                     self.client.send(json.dumps({"Setting_OK": self.player_color})) #encodingは必要かどうか調べる必要がある。
-                    break
+                    return True # 色設定成功
                 else:
                     print("No player color received")
-                
+                    # self.info_label.config(text="色情報を受信できませんでした。") # 必要に応じてエラー表示
+                    return False # 色設定失敗
+
             except Exception as e:
                 print(f"Error receiving updates: {e}")
-                break
-        
+                # self.info_label.config(text=f"エラー: {e}") # 必要に応じてエラー表示
+                return False # 色設定失敗
+        return False # ループを抜けたら失敗
+
     def receive_initialboard_data(self):
         print("receive_initialboard_data")
         try:
