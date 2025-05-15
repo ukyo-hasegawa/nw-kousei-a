@@ -167,9 +167,9 @@ class OthelloGame:
             if None in row:
                 print("return False")
                 return False
-            print("return True")
-            return True
-        
+        print("return True")
+        return True
+    
     def has_valid_moves(self, color):
         print("has_valid_moves")
         for row in range(self.board_size):
