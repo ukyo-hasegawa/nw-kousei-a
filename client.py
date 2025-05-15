@@ -387,6 +387,7 @@ class ClientGUI:
                     self.canvas.create_oval(x0, y0, x1, y1, fill="gray", tags="highlight")
         if not has_moves:
             print(f"{self.turn.capitalize()} has no valid moves")
+          
             
     def pass_turn(self):
         print(f"--------------------Pass turn:{self.turn} !!!!!!!!!!!!!!!!----------------------")
