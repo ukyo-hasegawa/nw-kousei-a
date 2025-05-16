@@ -33,6 +33,20 @@ class OthelloGame:
                 valid = True
         return valid
 
+    def is_valid_move_for_pass(self, row, col, color):
+        # 既に駒が置かれていれば、Falseを返す。
+        if self.board[row][col] is not None:
+            return False
+        # 八方向（縦、横、斜め）
+        directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
+        # デフォルトをFalseに設定
+        valid = False
+        # 各方向のマスの状態を確認
+        for direction in directions:
+            if self.check_direction_for_pass(row, col, direction, color):
+                valid = True
+        return valid
+
     def check_direction(self, row, col, direction, color):
         #print("check_direction")
         #相手のコマの色を代入
@@ -58,6 +72,61 @@ class OthelloGame:
             col += d_col
         return False
     
+    #passの処理判定のためだけに使う関数
+    # def check_direction_for_pass(self, row, col, direction, color):
+    #     #print("check_direction")
+    #     #相手のコマの色を代入
+    #     print(f"check_direction_color:{color}")
+    #     opponent_color = color 
+    #     #指定の方向のマスを確認
+    #     d_row, d_col = direction
+    #     row += d_row
+    #     col += d_col
+    #     #盤面外であればfalse
+    #     if not (0 <= row < self.board_size and 0 <= col < self.board_size):
+    #         return False
+    #     #相手の駒がなければfalse
+    #     if self.board[row][col] != opponent_color:
+    #         return False
+    #     while 0 <= row < self.board_size and 0 <= col < self.board_size:
+    #         #マスがnoneであればfalse
+    #         if self.board[row][col] is None:
+    #             return False
+    #         #自分の駒があれば、trueを返す
+    #         if self.board[row][col] == color:
+    #             return True
+    #         row += d_row
+    #         col += d_col
+    #     return False
+    
+    def check_direction_for_pass(self, row, col, direction, color):
+    
+        # 指定した位置にcolorの石を置くとして、指定方向に挟めるかどうかを確認する。
+        # color: 自分の色（置こうとしている色）
+        
+        d_row, d_col = direction
+        row += d_row
+        col += d_col
+
+        # 盤面外ならFalse
+        if not (0 <= row < self.board_size and 0 <= col < self.board_size):
+            return False
+
+        # 最初のマスが自分と同じ色ならFalse（＝相手の石が無いので挟めない）
+        if self.board[row][col] != ("white" if color == "black" else "black"):
+            return False
+
+        # さらに進みながら調査
+        while 0 <= row < self.board_size and 0 <= col < self.board_size:
+            if self.board[row][col] is None:
+                return False
+            if self.board[row][col] == color:
+                return True  # 挟める条件を満たした
+            row += d_row
+            col += d_col
+
+        return False
+
     def place_piece(self, row, col, color):
         # マスの状態を更新
         self.board[row][col] = color
@@ -66,7 +135,7 @@ class OthelloGame:
     def next_check(self,color):
         for row in range(self.board_size):
             for col in range(self.board_size):
-                if self.is_valid_move(row, col, color):
+                if self.is_valid_move_for_pass(row, col, color):
                     return True
         return False
 
@@ -98,9 +167,9 @@ class OthelloGame:
             if None in row:
                 print("return False")
                 return False
-            print("return True")
-            return True
-        
+        print("return True")
+        return True
+    
     def has_valid_moves(self, color):
         print("has_valid_moves")
         for row in range(self.board_size):
@@ -179,6 +248,7 @@ class Server:
                     
                     #player turnの切り替え
                     turn = "white" if turn == "black" else "black"
+                    print(f"turn:{turn}")
                     #盤面を更新した結果、次のプレイヤーが打つ手があるのかどうかを確認→打つ手があれば盤面をブロードキャスト
                     if(self.game.next_check(turn)):
                         self.game.case = "CONTINUE"
@@ -186,11 +256,12 @@ class Server:
                     elif self.game.judge_check(): #盤面が埋まった場合の勝敗処理
                         self.game.case = "FINISH"
                         self.broadcast_board(turn,self.game.case)
-                        return
+                        #return
                     else:
                         self.game.case = "PASS"
                         #単純に打つ手無し(パス)
                         print(f"{turn} PASS!!!!!!!!!!!!")
+
                         self.broadcast_board(turn,self.game.case)
 
         except Exception as e:
@@ -201,26 +272,22 @@ class Server:
 
     
 
-    def pass_turn(self):
-        print("--------------------Pass turn !!!!!!!!!!!!!!!!----------------------")
-        # パスしたら次のプレイヤーに手番を渡す
-        passed_turn = self.game.turn
-        self.game.turn = "white" if self.game.turn == "black" else "black"
-        #self.update_turn_display()
-        #self.highlight_valid_moves()
+    # def pass_turn(self):
+    #     print("--------------------Pass turn !!!!!!!!!!!!!!!!----------------------")
+    #     # パスしたら次のプレイヤーに手番を渡す
+    #     passed_turn = self.game.turn
+    #     self.game.turn = "white" if self.game.turn == "black" else "black"
+    #     #self.update_turn_display()
+    #     #self.highlight_valid_moves()
 
-        #パスしたことをclientに伝達
-        pass_message = json.dumps({"PASS":f"---------------------{passed_turn} is PASS!!!!!!!!!!!-------------------"}).encode()
-        for client in self.clients:
-            client.sendall(pass_message)
+    #     #パスしたことをclientに伝達
+    #     pass_message = json.dumps({"PASS":f"---------------------{passed_turn} is PASS!!!!!!!!!!!-------------------"}).encode()
+    #     for client in self.clients:
+    #         client.sendall(pass_message)
 
-        # 次のプレイヤーにも合法手がない場合、ゲームを終了する
-        if not self.game.next_check(self.game.turn):
-            self.send_finish_message()
-
-    
-    
-
+    #     # 次のプレイヤーにも合法手がない場合、ゲームを終了する
+    #     if not self.game.next_check(self.game.turn):
+    #         self.send_finish_message()
 
     def start(self):
         print("Start")

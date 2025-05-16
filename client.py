@@ -201,6 +201,7 @@ class ClientGUI:
                 if data["case"] == "PASS":
                     self.root.after(0, self.update_board_from_server, data)
                     self.pass_turn()
+                    #end_gameせず、ゲーム続行
                     
                 #盤面が埋まったので終了するパターン
                 if data["case"] == "FINISH":
@@ -386,26 +387,35 @@ class ClientGUI:
                     self.canvas.create_oval(x0, y0, x1, y1, fill="gray", tags="highlight")
         if not has_moves:
             print(f"{self.turn.capitalize()} has no valid moves")
-            #打つ手なしということをserverに伝える。
-
+          
+            
     def pass_turn(self):
-        print(f"--------------------Pass turn:{self.player_color} !!!!!!!!!!!!!!!!----------------------")
+        print(f"--------------------Pass turn:{self.turn} !!!!!!!!!!!!!!!!----------------------")
         # パスしたら次のプレイヤーに手番を渡す
         self.turn = "white" if self.turn == "black" else "black"
+        print(f"--------------------Pass turn:{self.turn} !!!!!!!!!!!!!!!!----------------------")
         self.update_turn_display()
         self.highlight_valid_moves()
-
+        print(f"--------------------Pass turn:{self.turn} !!!!!!!!!!!!!!!!----------------------")
+        self.turn = "white" if self.turn == "black" else "black"
+        print(f"self.turn:{self.turn}")
+        print(f"--------------------Pass turn:{self.turn} !!!!!!!!!!!!!!!!----------------------")
         # 次のプレイヤーにも合法手がない場合、ゲームを終了する
         if not self.has_valid_moves(self.turn):
-
             self.end_game()
+        else:
+            self.update_turn_display()
+            self.highlight_valid_moves()
 
     def has_valid_moves(self, color):
         print("has_valid_moves")
+        print(f"color:{color}")
         for row in range(self.board_size):
             for col in range(self.board_size):
                 if self.is_valid_move(row, col, color):
+                    print("has_valid_moves_true")
                     return True
+        print("has_valid_moves_false")
         return False
     
     def end_game(self):
