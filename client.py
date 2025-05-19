@@ -207,7 +207,8 @@ class ClientGUI:
                 if data["case"] == "FINISH":
                     #最終的な盤面の描画
                     self.root.after(0, self.update_board_from_server, data)
-                    self.end_game()
+                    self.root.after(0, self.end_game)           # ←ここだけ変更
+
 
                 #問題なし、game続行
                 if data["case"] == "CONTINUE":
