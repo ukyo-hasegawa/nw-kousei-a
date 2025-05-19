@@ -200,7 +200,7 @@ class ClientGUI:
                 #打つ手なし、パスするパターン
                 if data["case"] == "PASS":
                     self.root.after(0, self.update_board_from_server, data)
-                    self.pass_turn()
+                    #self.pass_turn()
                     #end_gameせず、ゲーム続行
                     
                 #盤面が埋まったので終了するパターン
