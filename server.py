@@ -136,7 +136,7 @@ class GameSession:
                             self.game.case = "FINISH"
                         else:
                             self.game.case = "PASS"
-                            self.game.turn = next_color
+                            # self.game.turn = next_color
                     # 更新をブロードキャスト
                     self.broadcast_state()
             except Exception as e:
