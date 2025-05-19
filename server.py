@@ -4,325 +4,168 @@ import json
 
 PORT = 8080
 
+def log(*args):
+    print(*args)
+
 class OthelloGame:
     def __init__(self, board_size=8):
         self.board_size = board_size
-        self.board = [[None for _ in range(self.board_size)] for _ in range(self.board_size)]
+        # None で空き、"black" と "white" で石の状態を表現
+        self.board = [[None] * board_size for _ in range(board_size)]
         self.turn = "black"
-        self.case = "CONTINUE" #プレイヤー間のやり取りを示す変数。"continue","pass","finish"の3種類
-        
+        self.case = "CONTINUE"  # プレイヤー間のやり取りを示す: "CONTINUE", "PASS", "FINISH"
+
     def initialize_board(self):
-        print("Initializing board")
+        # 初期盤面を中央に配置
         center = self.board_size // 2
         self.board[center - 1][center - 1] = "white"
-        self.board[center][center] = "white"
+        self.board[center][center]     = "white"
         self.board[center - 1][center] = "black"
         self.board[center][center - 1] = "black"
 
     def is_valid_move(self, row, col, color):
-        # 既に駒が置かれていれば、Falseを返す。
+        # すでに駒がある場合は False
         if self.board[row][col] is not None:
             return False
-        # 八方向（縦、横、斜め）
-        directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
-        # デフォルトをFalseに設定
-        valid = False
-        # 各方向のマスの状態を確認
-        for direction in directions:
-            if self.check_direction(row, col, direction, color):
-                valid = True
-        return valid
-
-    def is_valid_move_for_pass(self, row, col, color):
-        # 既に駒が置かれていれば、Falseを返す。
-        if self.board[row][col] is not None:
-            return False
-        # 八方向（縦、横、斜め）
-        directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
-        # デフォルトをFalseに設定
-        valid = False
-        # 各方向のマスの状態を確認
-        for direction in directions:
-            if self.check_direction_for_pass(row, col, direction, color):
-                valid = True
-        return valid
-
-    def check_direction(self, row, col, direction, color):
-        #print("check_direction")
-        #相手のコマの色を代入
-        opponent_color = "white" if color == "black" else "black"
-        #指定の方向のマスを確認
-        d_row, d_col = direction
-        row += d_row
-        col += d_col
-        #盤面外であればfalse
-        if not (0 <= row < self.board_size and 0 <= col < self.board_size):
-            return False
-        #相手の駒がなければfalse
-        if self.board[row][col] != opponent_color:
-            return False
-        while 0 <= row < self.board_size and 0 <= col < self.board_size:
-            #マスがnoneであればfalse
-            if self.board[row][col] is None:
-                return False
-            #自分の駒があれば、trueを返す
-            if self.board[row][col] == color:
+        # 8方向を探索して挟めるか確認
+        directions = [(0,1),(1,0),(0,-1),(-1,0),(1,1),(-1,-1),(1,-1),(-1,1)]
+        for dr, dc in directions:
+            if self._check_direction(row, col, dr, dc, color):
                 return True
-            row += d_row
-            col += d_col
         return False
-    
-    #passの処理判定のためだけに使う関数
-    # def check_direction_for_pass(self, row, col, direction, color):
-    #     #print("check_direction")
-    #     #相手のコマの色を代入
-    #     print(f"check_direction_color:{color}")
-    #     opponent_color = color 
-    #     #指定の方向のマスを確認
-    #     d_row, d_col = direction
-    #     row += d_row
-    #     col += d_col
-    #     #盤面外であればfalse
-    #     if not (0 <= row < self.board_size and 0 <= col < self.board_size):
-    #         return False
-    #     #相手の駒がなければfalse
-    #     if self.board[row][col] != opponent_color:
-    #         return False
-    #     while 0 <= row < self.board_size and 0 <= col < self.board_size:
-    #         #マスがnoneであればfalse
-    #         if self.board[row][col] is None:
-    #             return False
-    #         #自分の駒があれば、trueを返す
-    #         if self.board[row][col] == color:
-    #             return True
-    #         row += d_row
-    #         col += d_col
-    #     return False
-    
-    def check_direction_for_pass(self, row, col, direction, color):
-    
-        # 指定した位置にcolorの石を置くとして、指定方向に挟めるかどうかを確認する。
-        # color: 自分の色（置こうとしている色）
-        
-        d_row, d_col = direction
-        row += d_row
-        col += d_col
 
-        # 盤面外ならFalse
-        if not (0 <= row < self.board_size and 0 <= col < self.board_size):
+    def _check_direction(self, r, c, dr, dc, color):
+        # 指定方向に相手色の石を挟んで自色に届くか
+        opponent = "white" if color == "black" else "black"
+        r += dr; c += dc
+        # 盤外は False
+        if not (0 <= r < self.board_size and 0 <= c < self.board_size):
             return False
-
-        # 最初のマスが自分と同じ色ならFalse（＝相手の石が無いので挟めない）
-        if self.board[row][col] != ("white" if color == "black" else "black"):
+        # 最初に隣接するのが相手色でなければ False
+        if self.board[r][c] != opponent:
             return False
-
-        # さらに進みながら調査
-        while 0 <= row < self.board_size and 0 <= col < self.board_size:
-            if self.board[row][col] is None:
+        # さらに進んで自色に到達すれば True
+        while 0 <= r < self.board_size and 0 <= c < self.board_size:
+            if self.board[r][c] is None:
                 return False
-            if self.board[row][col] == color:
-                return True  # 挟める条件を満たした
-            row += d_row
-            col += d_col
-
+            if self.board[r][c] == color:
+                return True
+            r += dr; c += dc
         return False
 
-    def place_piece(self, row, col, color):
-        # マスの状態を更新
+    def place_and_flip(self, row, col, color):
+        # 駒を置いて、挟める方向の石をひっくり返す
         self.board[row][col] = color
-        
-    #次のplayerが打つ盤面が存在するのかどうかを確認する関数
-    def next_check(self,color):
-        for row in range(self.board_size):
-            for col in range(self.board_size):
-                if self.is_valid_move_for_pass(row, col, color):
+        directions = [(0,1),(1,0),(0,-1),(-1,0),(1,1),(-1,-1),(1,-1),(-1,1)]
+        for dr, dc in directions:
+            if self._check_direction(row, col, dr, dc, color):
+                self._flip_direction(row, col, dr, dc, color)
+
+    def _flip_direction(self, r, c, dr, dc, color):
+        # 指定方向に沿って相手色を自色にひっくり返す
+        opponent = "white" if color == "black" else "black"
+        r += dr; c += dc
+        while self.board[r][c] == opponent:
+            self.board[r][c] = color
+            r += dr; c += dc
+
+    def any_valid(self, color):
+        # 次のプレイヤーに合法手が存在するか
+        for r in range(self.board_size):
+            for c in range(self.board_size):
+                if self.is_valid_move(r, c, color):
                     return True
         return False
 
-    def flip_pieces(self, row, col, turn):
-        #print("flip_pieces")
-        directions = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (1, -1), (-1, 1)]
-        for direction in directions:
-            if self.check_direction(row, col, direction, turn):
-                self.flip_in_direction(row, col, direction, turn)
+    def full(self):
+        # 盤面がすべて埋まっているか
+        return all(cell is not None for row in self.board for cell in row)
 
-    def flip_in_direction(self, row, col, direction, turn):
-        #print("flip_in_direction")
-        opponent_color = "white" if turn == "black" else "black"
-        d_row, d_col = direction
-        row += d_row
-        col += d_col
-        while self.board[row][col] == opponent_color:
-            self.board[row][col] = turn
-            row += d_row
-            col += d_col
-
-    def judge_check(self):
-        print("judge_check")
-        """
-        ゲームが終了しているか確認する関数
-        盤面確認してNoneが存在しない(全て黒か白の石が置かれた)状態かどうかを確認。
-        """
-        for row in self.board:
-            if None in row:
-                print("return False")
-                return False
-        print("return True")
-        return True
-    
-    def has_valid_moves(self, color):
-        print("has_valid_moves")
-        for row in range(self.board_size):
-            for col in range(self.board_size):
-                if self.is_valid_move(row, col, color):
-                    return True
-        return False
-
-
-class Server:
-    def __init__(self, host="0.0.0.0", port=PORT):
-        #step0: サーバーの初期化
-        self.server_address = (host, port)
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind(self.server_address)
-        self.socket.listen(2)
-        self.clients = []
-        self.player_color_list = [] # プレイヤーカラーと対応するclientを格納するタプル,clientが接続し、色が割り当てられわりあてられたことを確認するためのもの。
+class GameSession:
+    def __init__(self, clients, colors):
+        self.clients = clients           # [conn1, conn2]
+        self.colors = colors             # ["black", "white"]
         self.game = OthelloGame()
-        #step1: クライアントの接続を待機
-        print("Waiting for clients to connect...")
+        self.lock = threading.Lock()
+        self.start_session()
 
-        #step2: クライアントの接続を受け入れ、色を割り当てる。→step3:クライアントが初期盤面データ(json形式)を待っているんで送信する。
-        self.start()
-
-        #step3:クライアントが初期盤面データ(json形式)を待っているんで送信する。
+    def start_session(self):
+        log("Starting new game session between", self.colors)
+        # 初期盤面を設定して両クライアントに送信
         self.game.initialize_board()
-        self.broadcast_board(self.game.turn,self.game.case)
+        self.broadcast_state()
+        # 各クライアントのハンドラーをデーモンスレッドで開始
+        for idx, conn in enumerate(self.clients):
+            threading.Thread(target=self.handle_client, args=(conn, idx), daemon=True).start()
 
-        #step4: クライアントからの手を受け取る。→受け取った手が有効な手であれば、盤面を更新し、クライアントに盤面データを送信する。無効な手であれば、エラーメッセージを送信する。
-        for client in self.clients:
-            threading.Thread(target=self.handle_client, args=(client, self.server_address)).start()
+    def broadcast_state(self):
+        # 現在の盤面・ターン・ケースを全クライアントへ送信
+        data = {
+            "board": self.game.board,
+            "turn": self.game.turn,
+            "case": self.game.case
+        }
+        payload = json.dumps(data).encode()
+        for c in self.clients:
+            try:
+                c.sendall(payload)
+            except Exception as e:
+                log("Error sending state:", e)
 
-    def broadcast_board(self, turn,case):
-        print("Broadcast board")
-        data = json.dumps({"board": self.game.board, "turn": turn, "case":case}).encode() #ここのturnは、サーバー側で管理しているターンの情報を送信するためのもの。
-        print(f"send_data:{data}")
-        for client in self.clients:
-            client.sendall(data) #client 2人に送信
-
-    #ゲーム終了をクライアントへ送信
-    def send_finish_message(self):
-        print("send_finish_message")
-        message = json.dumps({"finish":"game_end"}).encode()
-        for client in self.clients:
-            client.sendall(message)
-
-    def handle_client(self, conn, addr):
-        print(f"Handling client {addr}")
-        try:
-            while True: 
-                try:
-                    data = conn.recv(1024)
-                    if not data:
-                        print("切断されました")
-                        self.game.case = "FORCED_TERMINATION"
-                        self.broadcast_board(self.game.turn,self.game.case)
-
-                        break
-                except (ConnectionResetError, BrokenPipeError):
-                    print("接続が失われました")
-                    break
-                #print(f"Received data from {addr}: {data}")
-                move = json.loads(data.decode())
-
-                x, y, turn= move["x"], move["y"], move["turn"]
-                print(f"--------------------------------今手を打ったのは:{turn}-------------------------------")
-
-                #合法手かどうかの確認
-                if(self.game.is_valid_move(y, x, turn)):
-                    #コマを置く(描画はしない)
-                    self.game.place_piece(y,x,turn)
-                    #コマをひっくり返す
-                    self.game.flip_pieces(y, x, turn)
-                    #最終的なスコアはclient側で計算させるので不要
-                    
-                    #player turnの切り替え
-                    turn = "white" if turn == "black" else "black"
-                    print(f"turn:{turn}")
-                    #盤面を更新した結果、次のプレイヤーが打つ手があるのかどうかを確認→打つ手があれば盤面をブロードキャスト
-                    if(self.game.next_check(turn)):
-                        self.game.case = "CONTINUE"
-                        self.broadcast_board(turn,self.game.case)
-                    elif self.game.judge_check(): #盤面が埋まった場合の勝敗処理
-                        self.game.case = "FINISH"
-                        self.broadcast_board(turn,self.game.case)
-                        #return
-                    else:
-                        self.game.case = "PASS"
-                        #単純に打つ手無し(パス)
-                        print(f"{turn} PASS!!!!!!!!!!!!")
-
-                        self.broadcast_board(turn,self.game.case)
-
-        except Exception as e:
-            print(f"Error handling client {addr}: {e}")
-        finally: #try抜けたら確実に実行される処理
-            conn.close()
-            self.clients.remove(conn)
-
-    
-
-    # def pass_turn(self):
-    #     print("--------------------Pass turn !!!!!!!!!!!!!!!!----------------------")
-    #     # パスしたら次のプレイヤーに手番を渡す
-    #     passed_turn = self.game.turn
-    #     self.game.turn = "white" if self.game.turn == "black" else "black"
-    #     #self.update_turn_display()
-    #     #self.highlight_valid_moves()
-
-    #     #パスしたことをclientに伝達
-    #     pass_message = json.dumps({"PASS":f"---------------------{passed_turn} is PASS!!!!!!!!!!!-------------------"}).encode()
-    #     for client in self.clients:
-    #         client.sendall(pass_message)
-
-    #     # 次のプレイヤーにも合法手がない場合、ゲームを終了する
-    #     if not self.game.next_check(self.game.turn):
-    #         self.send_finish_message()
-
-    def start(self):
-        print("Start")
-        print(f"Server started on {self.server_address}")
+    def handle_client(self, conn, idx):
+        # クライアントからの入力を受信し、ゲームを進行
+        color = self.colors[idx]
         while True:
-            conn, addr = self.socket.accept()
-            print(f"Client connected: {addr}") #ここで接続したクライアントのIPアドレスを表示する。
-
-            # プレイヤーカラーを決定
-            if len(self.clients) % 2 == 0:
-                player_color = "black"
-            elif len(self.clients) % 2 == 1:
-                player_color = "white"
-            else:
-                conn.sendall(json.dumps({"error": "Game already has 2 players"}).encode())
-                conn.close()
-                continue
-
-            # 色をクライアントに送信
-            conn.sendall(json.dumps({"player_color": player_color}).encode())
-            print(f"Assigned color {player_color} to {addr}")
-
-            #各クライアントからの色を確認した旨を受信するまで待機
-            check_player_color_raw = conn.recv(1024)
-            check_player_color = check_player_color_raw.decode() #.strip()は必要ないのかどうかは調べる必要がある。
-            if "Setting_OK" in check_player_color:
-                check_player_color = json.loads(check_player_color)["Setting_OK"]
-                print(f"Received player color confirmation from {addr}: {check_player_color}")
-            self.player_color_list.append((conn, check_player_color))
-            self.clients.append(conn) 
-            #2人から色の確認が取れたらループを抜ける
-            if len(self.player_color_list) == 2:    
+            try:
+                raw = conn.recv(1024)
+                if not raw:
+                    log(f"Client {color} disconnected")
+                    break
+                move = json.loads(raw.decode())
+                x, y, turn = move["x"], move["y"], move["turn"]
+                with self.lock:
+                    # ターンチェックと合法手チェック
+                    if turn == self.game.turn and self.game.is_valid_move(y, x, turn):
+                        self.game.place_and_flip(y, x, turn)
+                        next_color = "white" if turn == "black" else "black"
+                        # 次の手があるか、盤面満杯かでケースを設定
+                        if self.game.any_valid(next_color):
+                            self.game.case = "CONTINUE"
+                            self.game.turn = next_color
+                        elif self.game.full():
+                            self.game.case = "FINISH"
+                        else:
+                            self.game.case = "PASS"
+                            self.game.turn = next_color
+                    # 更新をブロードキャスト
+                    self.broadcast_state()
+            except Exception as e:
+                log("Error in session handle:", e)
                 break
-        return 
+        conn.close()
 
+# メインサーバー処理
 if __name__ == "__main__":
-    server = Server()
-    #server.start()
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("0.0.0.0", PORT))
+    server.listen()
+
+    waiting = []
+    colors = ["black", "white"]
+    log(f"Server listening on port {PORT}")
+
+    # クライアント接続待機
+    while True:
+        conn, addr = server.accept()
+        log("Client connected:", addr)
+        waiting.append(conn)
+        # 2 人揃ったらゲーム開始
+        if len(waiting) >= 2:
+            pair = waiting[:2]
+            waiting = waiting[2:]
+            # 色割り当てと確認
+            for c, col in zip(pair, colors):
+                c.sendall(json.dumps({"player_color": col}).encode())
+                c.recv(1024)  # Setting_OK の確認
+            GameSession(pair, colors)
